@@ -91,21 +91,34 @@ let state = {
   loginStatus: ""
 };
 
+let alreadyLoaded = false;
+
 async function init() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    state.user = session.user;
-    await loadEverything();
-  } else {
-    state.screen = "login";
-    render();
-  }
+  state.screen = "loading";
+  render();
+
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === "SIGNED_IN" && session) {
+    if (session) {
       state.user = session.user;
-      await loadEverything();
+      if (!alreadyLoaded || event === "SIGNED_IN") {
+        alreadyLoaded = true;
+        await loadEverything();
+      }
+    } else if (event !== "INITIAL_SESSION") {
+      state.screen = "login";
+      state.user = null;
+      alreadyLoaded = false;
+      render();
     }
   });
+
+  // Fallback in case no auth event fires within a couple seconds (e.g. no session at all)
+  setTimeout(() => {
+    if (state.screen === "loading" && !alreadyLoaded) {
+      state.screen = "login";
+      render();
+    }
+  }, 2500);
 }
 
 async function loadEverything() {
