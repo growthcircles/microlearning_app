@@ -216,7 +216,34 @@ async function loadEverything() {
   const { data: streakRow } = await sb.from("streaks").select("*").eq("user_id", state.user.id).maybeSingle();
   state.streak = streakRow ? streakRow.current_streak : 0;
   state.longestStreak = streakRow ? streakRow.longest_streak : 0;
+
+  const { data: myMemberships } = await sb.from("group_members").select("group_id").eq("user_id", state.user.id);
+  state.userGroupIds = (myMemberships || []).map(m => m.group_id);
+  const { data: assignmentRows } = await sb.from("assignments").select("*");
+  state.assignments = assignmentRows || [];
+
   state.screen = "home"; state.activeTab = "home"; render();
+}
+
+// Returns null if nothing has been assigned yet system-wide (show everything, back-compat),
+// otherwise a Set of course_ids actually assigned to this learner (directly or via a group).
+function getAssignedCourseIds() {
+  if (!state.assignments || state.assignments.length === 0) return null;
+  const ids = new Set();
+  state.assignments.forEach(a => {
+    if (a.user_id === state.user.id) ids.add(a.course_id);
+    else if (a.group_id && state.userGroupIds.includes(a.group_id)) ids.add(a.course_id);
+  });
+  return ids;
+}
+function visibleFlatModules() {
+  const assignedIds = getAssignedCourseIds();
+  const flat = flatModules();
+  return assignedIds === null ? flat : flat.filter(m => assignedIds.has(m.courseId));
+}
+function visibleCourseIds() {
+  const assignedIds = getAssignedCourseIds();
+  return assignedIds === null ? Object.keys(state.courses) : Object.keys(state.courses).filter(id => assignedIds.has(id));
 }
 
 async function sendMagicLink(email) {
@@ -290,7 +317,7 @@ function flatModules() {
   return flat;
 }
 function findNextModule() {
-  const flat = flatModules();
+  const flat = visibleFlatModules();
   return flat.find(m => !state.progressMap[m.id] || !state.progressMap[m.id].mission_done) || null;
 }
 
@@ -375,7 +402,7 @@ function renderHome() {
     const q = searchInput.value.trim().toLowerCase();
     resultsBox.innerHTML = "";
     if (!q) { resultsBox.style.display = "none"; return; }
-    const matches = flatModules().filter(m => m.title.toLowerCase().includes(q) || m.courseTitle.toLowerCase().includes(q));
+    const matches = visibleFlatModules().filter(m => m.title.toLowerCase().includes(q) || m.courseTitle.toLowerCase().includes(q));
     if (matches.length === 0) { resultsBox.innerHTML = '<p class="empty" style="padding:12px;">No matches</p>'; resultsBox.style.display = "block"; return; }
     matches.slice(0, 8).forEach(m => {
       const row = document.createElement("div"); row.style.cssText = "padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--line); font-size:13px;";
@@ -403,14 +430,16 @@ function renderHome() {
 
   const next = findNextModule();
   if (next) {
-    const flat = flatModules(); const dayNum = flat.findIndex(m => m.id === next.id) + 1;
+    const flat = visibleFlatModules(); const dayNum = flat.findIndex(m => m.id === next.id) + 1;
     const hero = document.createElement("div"); hero.className = "hero-card"; hero.onclick = () => openModule(next.courseId, next);
     hero.innerHTML = `<div class="hicon">\u26A1</div><p style="font-size:11px; font-weight:700; text-transform:uppercase; opacity:0.75; margin:0 0 2px;">Day ${dayNum} &middot; ${next.courseTitle}</p><h3>${next.title}</h3><div class="meta"><span>&#9200; ${next.readTime || ""}</span><span>+150 XP</span></div>`;
     screen.appendChild(hero);
   } else { screen.innerHTML += '<p class="empty">All caught up. New content coming soon.</p>'; }
 
   const h = document.createElement("h2"); h.textContent = "Your courses"; h.style.marginTop = "6px"; screen.appendChild(h);
-  Object.keys(state.courses).forEach(id => {
+  const courseIds = visibleCourseIds();
+  if (courseIds.length === 0) { screen.innerHTML += '<p class="empty">Nothing assigned to you yet, check with your admin.</p>'; }
+  courseIds.forEach(id => {
     const course = state.courses[id];
     const doneCount = course.modules.filter(m => state.progressMap[m.id] && state.progressMap[m.id].mission_done).length;
     const pct = Math.round((doneCount / course.modules.length) * 100);
@@ -469,9 +498,9 @@ function renderFeed() {
 function renderJourney() {
   const wrap = document.createElement("div"); wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
-  screen.innerHTML = `<h1>Your Journey</h1><p class="subtitle">${totalModuleCount()}-day microlearning programme</p>`;
+  screen.innerHTML = `<h1>Your Journey</h1><p class="subtitle">${visibleFlatModules().length}-day microlearning programme</p>`;
 
-  const flat = flatModules();
+  const flat = visibleFlatModules();
   const dayHeads = ["M","T","W","T","F","S","S"];
   const cal = document.createElement("div"); cal.className = "cal-grid";
   dayHeads.forEach(d => { const h = document.createElement("div"); h.className = "cal-head"; h.textContent = d; cal.appendChild(h); });
@@ -793,6 +822,131 @@ function renderSaved() {
   wrap.appendChild(screen); return wrap;
 }
 
+async function loadAdminGroupsData() {
+  const { data: groups } = await sb.from("groups").select("*").order("created_at");
+  const { data: members } = await sb.from("group_members").select("*, profiles(email)");
+  const { data: assignments } = await sb.from("assignments").select("*, courses(title), profiles(email)");
+  state.adminGroups = groups || [];
+  state.adminGroupMembers = members || [];
+  state.adminAssignments = assignments || [];
+}
+async function createGroup(name) {
+  if (!name) return;
+  await sb.from("groups").insert({ name });
+  await loadAdminGroupsData(); render();
+}
+async function deleteGroup(id) {
+  await sb.from("groups").delete().eq("id", id);
+  await loadAdminGroupsData(); render();
+}
+async function addMemberToGroup(groupId, email) {
+  if (!email) return;
+  const { data: prof } = await sb.from("profiles").select("id").eq("email", email).maybeSingle();
+  if (!prof) { alert("No account found for that email yet. They need to sign in at least once first."); return; }
+  await sb.from("group_members").insert({ group_id: groupId, user_id: prof.id });
+  await loadAdminGroupsData(); render();
+}
+async function removeMemberFromGroup(groupId, userId) {
+  await sb.from("group_members").delete().eq("group_id", groupId).eq("user_id", userId);
+  await loadAdminGroupsData(); render();
+}
+async function createAssignment(form) {
+  let userId = null;
+  if (form.email) {
+    const { data: prof } = await sb.from("profiles").select("id").eq("email", form.email).maybeSingle();
+    if (!prof) { alert("No account found for that email yet. They need to sign in at least once first."); return; }
+    userId = prof.id;
+  }
+  await sb.from("assignments").insert({ course_id: form.courseId, group_id: form.groupId || null, user_id: userId, due_date: form.dueDate || null });
+  await loadAdminGroupsData(); render();
+}
+async function deleteAssignment(id) {
+  await sb.from("assignments").delete().eq("id", id);
+  await loadAdminGroupsData(); render();
+}
+
+function renderStakeGroups(screen) {
+  screen.innerHTML = `<h1>Groups &amp; Assignments</h1><p class="subtitle">Control who sees which courses. If nothing's assigned, everyone sees everything.</p>`;
+  const body = document.createElement("div"); body.innerHTML = '<p class="empty">Loading...</p>';
+  screen.appendChild(body);
+  loadAdminGroupsData().then(() => {
+    body.innerHTML = "";
+
+    const groupForm = document.createElement("div"); groupForm.className = "form-card";
+    groupForm.innerHTML = `<div class="card-label">Create a group</div><label>Group name</label><input id="g-name" placeholder="e.g. Sales team">`;
+    const gBtn = document.createElement("button"); gBtn.className = "primary-btn"; gBtn.style.marginTop = "10px"; gBtn.textContent = "Create group";
+    gBtn.onclick = () => createGroup(groupForm.querySelector("#g-name").value.trim());
+    groupForm.appendChild(gBtn);
+    body.appendChild(groupForm);
+
+    const h2 = document.createElement("h2"); h2.textContent = "Groups"; body.appendChild(h2);
+    if (state.adminGroups.length === 0) {
+      const p = document.createElement("p"); p.className = "empty"; p.textContent = "No groups yet."; body.appendChild(p);
+    }
+    state.adminGroups.forEach(g => {
+      const members = state.adminGroupMembers.filter(m => m.group_id === g.id);
+      const row = document.createElement("div"); row.className = "content-row";
+      row.innerHTML = `<div><p class="cname">${g.name}</p><p class="csub">${members.length} member${members.length === 1 ? "" : "s"}</p></div>`;
+      const del = document.createElement("button"); del.className = "delete-btn"; del.textContent = "Delete group";
+      del.onclick = () => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id); };
+      row.appendChild(del);
+      body.appendChild(row);
+      members.forEach(m => {
+        const mrow = document.createElement("div"); mrow.className = "content-row"; mrow.style.marginLeft = "16px";
+        mrow.innerHTML = `<div><p class="cname">${m.profiles ? m.profiles.email : m.user_id}</p></div>`;
+        const rem = document.createElement("button"); rem.className = "delete-btn"; rem.textContent = "Remove";
+        rem.onclick = () => removeMemberFromGroup(g.id, m.user_id);
+        mrow.appendChild(rem);
+        body.appendChild(mrow);
+      });
+      const addWrap = document.createElement("div"); addWrap.style.cssText = "display:flex; gap:8px; margin:6px 0 14px 16px;";
+      const emailInput = document.createElement("input"); emailInput.placeholder = "learner@email.com";
+      emailInput.style.cssText = "flex:1; background:var(--surface); border:1px solid var(--line); color:var(--ink); border-radius:10px; padding:8px 10px; font-size:12px;";
+      const addBtn = document.createElement("button"); addBtn.className = "secondary-btn"; addBtn.style.cssText = "margin-top:0; width:auto; padding:8px 14px;"; addBtn.textContent = "Add";
+      addBtn.onclick = () => addMemberToGroup(g.id, emailInput.value.trim());
+      addWrap.appendChild(emailInput); addWrap.appendChild(addBtn);
+      body.appendChild(addWrap);
+    });
+
+    const assignForm = document.createElement("div"); assignForm.className = "form-card";
+    const courseOpts = Object.keys(state.courses).map(id => `<option value="${id}">${state.courses[id].title}</option>`).join("");
+    const groupOpts = state.adminGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join("");
+    assignForm.innerHTML = `
+      <div class="card-label">Assign a course</div>
+      <label>Course</label><select id="a-course">${courseOpts}</select>
+      <label>Group (leave as "no group" to assign to one person instead)</label>
+      <select id="a-group"><option value="">No group, use email below</option>${groupOpts}</select>
+      <label>Or assign to one person by email</label><input id="a-email" placeholder="learner@email.com">
+      <label>Due date (optional)</label><input id="a-due" type="date">
+    `;
+    const aBtn = document.createElement("button"); aBtn.className = "primary-btn"; aBtn.style.marginTop = "10px"; aBtn.textContent = "Create assignment";
+    aBtn.onclick = () => createAssignment({
+      courseId: assignForm.querySelector("#a-course").value,
+      groupId: assignForm.querySelector("#a-group").value || null,
+      email: assignForm.querySelector("#a-email").value.trim(),
+      dueDate: assignForm.querySelector("#a-due").value || null
+    });
+    assignForm.appendChild(aBtn);
+    body.appendChild(assignForm);
+
+    const h3 = document.createElement("h2"); h3.textContent = "Existing assignments"; body.appendChild(h3);
+    if (state.adminAssignments.length === 0) {
+      const p = document.createElement("p"); p.className = "empty"; p.textContent = "Nothing assigned yet, everyone currently sees every course."; body.appendChild(p);
+    }
+    state.adminAssignments.forEach(a => {
+      const courseTitle = a.courses ? a.courses.title : a.course_id;
+      const groupName = a.group_id ? (state.adminGroups.find(g => g.id === a.group_id) || {}).name : null;
+      const target = a.user_id ? (a.profiles ? a.profiles.email : "a specific person") : (groupName || "a group");
+      const row = document.createElement("div"); row.className = "content-row";
+      row.innerHTML = `<div><p class="cname">${courseTitle}</p><p class="csub">assigned to ${target}${a.due_date ? ", due " + a.due_date : ""}</p></div>`;
+      const del = document.createElement("button"); del.className = "delete-btn"; del.textContent = "Remove";
+      del.onclick = () => deleteAssignment(a.id);
+      row.appendChild(del);
+      body.appendChild(row);
+    });
+  });
+}
+
 function renderTabbar() {
   const bar = document.createElement("div"); bar.className = "tabbar";
   const tabs = [
@@ -820,7 +974,7 @@ function renderStakeholder() {
   wrap.querySelector("#back-to-trainee").onclick = () => { state.mode = "trainee"; render(); };
 
   const nav = document.createElement("div"); nav.className = "stake-nav";
-  [["overview", "Overview"], ["learners", "Learner Progress"], ["content", "Content"]].forEach(([id, label]) => {
+  [["overview", "Overview"], ["learners", "Learner Progress"], ["content", "Content"], ["groups", "Groups"]].forEach(([id, label]) => {
     const t = document.createElement("div"); t.className = "stake-tab" + (state.stakeTab === id ? " active" : ""); t.textContent = label;
     t.onclick = () => { state.stakeTab = id; render(); };
     nav.appendChild(t);
@@ -830,7 +984,8 @@ function renderStakeholder() {
   const screen = document.createElement("div"); screen.className = "screen";
   if (state.stakeTab === "overview") renderStakeOverview(screen);
   else if (state.stakeTab === "learners") renderStakeLearners(screen);
-  else renderStakeContent(screen);
+  else if (state.stakeTab === "content") renderStakeContent(screen);
+  else renderStakeGroups(screen);
   wrap.appendChild(screen);
   return wrap;
 }
