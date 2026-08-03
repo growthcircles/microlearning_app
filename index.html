@@ -345,14 +345,20 @@ function topStats() {
   `;
   const container = document.createElement("div");
   container.appendChild(wrap);
+  const row = document.createElement("div"); row.style.cssText = "padding:0 20px 8px; display:flex; justify-content:space-between; align-items:center;";
+  const signOutBtn = document.createElement("button"); signOutBtn.className = "mode-link";
+  signOutBtn.textContent = "Sign out";
+  signOutBtn.onclick = async () => { await sb.auth.signOut(); state.screen = "login"; state.user = null; state.role = "learner"; alreadyLoaded = false; render(); };
+  row.appendChild(signOutBtn);
   if (state.role === "admin") {
     const modeBtn = document.createElement("button"); modeBtn.className = "mode-link";
     modeBtn.textContent = "Stakeholder view";
     modeBtn.onclick = async () => { state.mode = "stakeholder"; await loadLearnerStats(); render(); };
-    const row = document.createElement("div"); row.style.cssText = "padding:0 20px 8px; display:flex; justify-content:flex-end;";
     row.appendChild(modeBtn);
-    container.appendChild(row);
+  } else {
+    row.appendChild(document.createElement("span"));
   }
+  container.appendChild(row);
   return container;
 }
 
