@@ -17,6 +17,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); height: 100%; }
   #app-shell { max-width: 420px; margin: 24px auto; background: var(--surface); border-radius: 28px; border: 1px solid var(--line); height: calc(100dvh - 48px); display: flex; flex-direction: column; overflow: hidden; }
+  .tab-screen-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   @media (max-width: 480px) {
     #app-shell { margin: 0 auto; height: 100dvh; border-radius: 0; border: none; max-width: 100%; padding-top: env(safe-area-inset-top); }
   }
@@ -384,7 +385,7 @@ function topStats() {
 }
 
 function renderHome() {
-  const wrap = document.createElement("div"); wrap.appendChild(topStats());
+  const wrap = document.createElement("div"); wrap.className = "tab-screen-wrap"; wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
 
   const searchWrap = document.createElement("div"); searchWrap.style.cssText = "position:relative; margin-bottom:14px;";
@@ -457,7 +458,7 @@ function renderHome() {
 }
 
 function renderFeed() {
-  const wrap = document.createElement("div"); wrap.appendChild(topStats());
+  const wrap = document.createElement("div"); wrap.className = "tab-screen-wrap"; wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
   screen.innerHTML = `<h1>Pulse Feed</h1><p class="subtitle">Best practices from the field, shared in 30 seconds</p>`;
 
@@ -502,7 +503,7 @@ function renderFeed() {
 }
 
 function renderJourney() {
-  const wrap = document.createElement("div"); wrap.appendChild(topStats());
+  const wrap = document.createElement("div"); wrap.className = "tab-screen-wrap"; wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
   screen.innerHTML = `<h1>Your Journey</h1><p class="subtitle">${visibleFlatModules().length}-day microlearning programme</p>`;
 
@@ -542,7 +543,7 @@ function renderJourney() {
 }
 
 function renderBadges() {
-  const wrap = document.createElement("div"); wrap.appendChild(topStats());
+  const wrap = document.createElement("div"); wrap.className = "tab-screen-wrap"; wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
   const xp = computeXP(); const li = levelInfo(xp);
   screen.innerHTML = `<h1>Achievements</h1><p class="subtitle">Loading...</p>`;
@@ -594,7 +595,7 @@ async function loadMyTeammateIds() {
 }
 
 function renderRanks() {
-  const wrap = document.createElement("div"); wrap.appendChild(topStats());
+  const wrap = document.createElement("div"); wrap.className = "tab-screen-wrap"; wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
   screen.innerHTML = `<h1>Leaderboard</h1><p class="subtitle">Compete, climb, find your rhythm</p>`;
 
@@ -844,7 +845,7 @@ async function toggleSaved(moduleId) {
 }
 
 function renderSaved() {
-  const wrap = document.createElement("div"); wrap.appendChild(topStats());
+  const wrap = document.createElement("div"); wrap.className = "tab-screen-wrap"; wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
   const back = document.createElement("button"); back.className = "mode-link"; back.style.marginBottom = "10px"; back.textContent = "\u2190 Back to home";
   back.onclick = () => { state.activeTab = "home"; render(); };
