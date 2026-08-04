@@ -107,29 +107,8 @@
   .post-name { font-size: 12.5px; font-weight: 700; }
   .post-text { font-size: 13.5px; line-height: 1.5; margin: 0 0 8px; }
   .like-btn { background: none; border: none; color: var(--ink-soft); font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
-  .stake-nav { display: flex; gap: 6px; padding: 12px 16px; overflow-x: auto; border-bottom: 1px solid var(--line); }
-  .stake-tab { white-space: nowrap; padding: 6px 12px; border-radius: 20px; font-size: 12px; background: var(--surface-2); color: var(--ink-soft); cursor: pointer; }
-  .stake-tab.active { background: var(--accent); color: #06251F; font-weight: 700; }
-  table.learner-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-  table.learner-table th { text-align: left; color: var(--ink-muted); font-weight: 600; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 10px; text-transform: uppercase; }
-  table.learner-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); }
-  .status-pill { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
-  .status-completed { background: var(--good-bg); color: var(--good-text); }
-  .status-progress { background: rgba(251,191,36,0.15); color: var(--gold); }
-  .status-atrisk { background: var(--bad-bg); color: var(--bad-text); }
-  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .bar-label { font-size: 11px; color: var(--ink-soft); width: 28px; }
-  .bar-track { flex: 1; height: 8px; background: var(--surface); border-radius: 4px; overflow: hidden; }
-  .bar-fill { height: 100%; background: var(--accent); }
-  .form-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
-  .form-card label { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.02em; display: block; margin: 10px 0 4px; }
-  .form-card label:first-child { margin-top: 0; }
-  .form-card input, .form-card textarea, .form-card select { width: 100%; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 9px 11px; font-size: 13px; font-family: inherit; }
-  .form-card textarea { resize: vertical; min-height: 50px; }
-  .content-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 6px; }
-  .content-row .cname { font-size: 13px; font-weight: 700; margin: 0; }
-  .content-row .csub { font-size: 11px; color: var(--ink-soft); margin: 0; }
-  .delete-btn { background: var(--bad-bg); color: var(--bad-text); border: none; border-radius: 8px; padding: 6px 10px; font-size: 11px; cursor: pointer; }
+  .reply-block { margin-left: 20px; border-left: 2px solid var(--line); padding-left: 12px; margin-top: 10px; }
+  .reply-link { background: none; border: none; color: var(--accent-text); font-size: 11.5px; cursor: pointer; padding: 0; }
 </style>
 </head>
 <body>
@@ -159,23 +138,32 @@ const LEVEL_TIERS = [
   { name: "Master", min: 2000 }
 ];
 
-const BADGES = [
-  { id: "first_power_up", name: "First Power Up", desc: "Complete your first lesson", icon: "\u26A1", check: s => Object.values(s.progressMap).some(m => m.selected_index !== undefined && m.selected_index !== null) },
-  { id: "on_fire", name: "On Fire", desc: "3 day streak", icon: "\uD83D\uDD25", check: s => s.streak >= 3 },
-  { id: "week_streak", name: "Week Streak", desc: "7 day streak", icon: "\uD83D\uDCC5", check: s => s.streak >= 7 },
-  { id: "quiz_ace", name: "Quiz Ace", desc: "Get one quiz right", icon: "\uD83E\uDDE0", check: s => Object.values(s.progressMap).some(m => m.correct) },
-  { id: "good_listener", name: "Good Listener", desc: "Finish Active Listening", icon: "\uD83D\uDC42", check: s => !!(s.progressMap["comms-1"] && s.progressMap["comms-1"].mission_done) },
-  { id: "feedback_pro", name: "Feedback Pro", desc: "Finish Giving Feedback", icon: "\uD83D\uDCAC", check: s => !!(s.progressMap["comms-3"] && s.progressMap["comms-3"].mission_done) },
-  { id: "first_mission", name: "First Mission", desc: "Submit a real-world mission", icon: "\uD83C\uDFAF", check: s => Object.values(s.progressMap).some(m => m.mission_done) },
-  { id: "course_complete", name: "Course Complete", desc: "Finish an entire course", icon: "\uD83C\uDFC6", check: s => Object.keys(s.courses).some(cid => s.courses[cid].modules.every(m => s.progressMap[m.id] && s.progressMap[m.id].mission_done)) }
-];
+function achievementEarned(a) {
+  if (a.rule_type === "streak") return state.streak >= a.rule_value;
+  if (a.rule_type === "mission_count") return Object.values(state.progressMap).filter(m => m.mission_done).length >= a.rule_value;
+  if (a.rule_type === "quiz_count") return Object.values(state.progressMap).filter(m => m.selected_index !== undefined && m.selected_index !== null).length >= a.rule_value;
+  if (a.rule_type === "course_complete") {
+    const c = state.courses[a.rule_course_id];
+    return !!(c && c.modules.length > 0 && c.modules.every(m => state.progressMap[m.id] && state.progressMap[m.id].mission_done));
+  }
+  if (a.rule_type === "discussion_count") return (state.myDiscussionCount || 0) >= a.rule_value;
+  return false;
+}
+async function loadAchievements() {
+  const { data } = await sb.from("achievements").select("*").order("created_at");
+  state.achievements = data || [];
+}
+async function loadMyDiscussionCount() {
+  const { count } = await sb.from("discussion_posts").select("id", { count: "exact", head: true }).eq("user_id", state.user.id);
+  state.myDiscussionCount = count || 0;
+}
 
 let state = {
-  screen: "loading", user: null, role: "learner", courses: {}, progressMap: {}, streak: 0, longestStreak: 0,
+  screen: "loading", user: null, courses: {}, progressMap: {}, streak: 0, longestStreak: 0,
   courseId: null, moduleIndex: 0, answered: false, selected: null, missionText: "",
-  leaderboard: [], loginStatus: "", activeTab: "home", mode: "trainee",
-  feedPosts: [], feedFilter: "all", feedDraft: "", lbMode: "individuals",
-  stakeTab: "overview", learnerStats: [], learnerFilter: "all"
+  leaderboard: [], loginStatus: "", activeTab: "home",
+  feedPosts: [], feedFilter: "all", feedDraft: "", lbMode: "individuals", lbCourseFilter: "overall",
+  achievements: [], myDiscussionCount: 0, discussionPosts: [], discussionDraft: "", replyDraft: {}, replyOpenFor: null
 };
 let alreadyLoaded = false;
 
@@ -195,8 +183,6 @@ async function init() {
 async function loadEverything() {
   state.screen = "loading"; render();
   await sb.from("profiles").upsert({ id: state.user.id, email: state.user.email }, { onConflict: "id", ignoreDuplicates: false });
-  const { data: profileRow } = await sb.from("profiles").select("role").eq("id", state.user.id).maybeSingle();
-  state.role = profileRow ? profileRow.role : "learner";
   const { data: courseRows } = await sb.from("courses").select("*").order("sort_order");
   const { data: moduleRows } = await sb.from("modules").select("*").order("sort_order");
   const courses = {};
@@ -245,6 +231,18 @@ function visibleCourseIds() {
   const assignedIds = getAssignedCourseIds();
   return assignedIds === null ? Object.keys(state.courses) : Object.keys(state.courses).filter(id => assignedIds.has(id));
 }
+// A module unlocks the calendar day after the one before it was completed, so a course
+// can't be finished in one sitting. The first module in the sequence is always open.
+function isModuleUnlocked(index, flat) {
+  if (index <= 0) return true;
+  const prev = flat[index - 1];
+  const prevProgress = state.progressMap[prev.id];
+  if (!prevProgress || !prevProgress.mission_done) return false;
+  if (!prevProgress.mission_completed_at) return true; // older data with no timestamp, don't block on it
+  const completedDate = prevProgress.mission_completed_at.slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  return completedDate < today;
+}
 
 async function sendMagicLink(email) {
   state.loginStatus = "Sending link..."; render();
@@ -259,8 +257,9 @@ async function saveQuizAnswer(moduleId, selectedIndex, correct) {
   await updateStreak();
 }
 async function saveMission(moduleId, reflection) {
-  await sb.from("module_progress").upsert({ user_id: state.user.id, module_id: moduleId, mission_done: true, mission_reflection: reflection }, { onConflict: "user_id,module_id" });
-  state.progressMap[moduleId] = { ...(state.progressMap[moduleId] || {}), mission_done: true, mission_reflection: reflection };
+  const now = new Date().toISOString();
+  await sb.from("module_progress").upsert({ user_id: state.user.id, module_id: moduleId, mission_done: true, mission_reflection: reflection, mission_completed_at: now }, { onConflict: "user_id,module_id" });
+  state.progressMap[moduleId] = { ...(state.progressMap[moduleId] || {}), mission_done: true, mission_reflection: reflection, mission_completed_at: now };
 }
 async function updateStreak() {
   const today = new Date().toISOString().slice(0, 10);
@@ -278,8 +277,13 @@ async function updateStreak() {
   state.streak = newStreak; state.longestStreak = longest;
 }
 async function loadLeaderboard() {
-  const { data } = await sb.from("leaderboard").select("*").order("modules_completed", { ascending: false });
-  state.leaderboard = data || [];
+  if (state.lbCourseFilter === "overall") {
+    const { data } = await sb.from("leaderboard").select("*").order("modules_completed", { ascending: false });
+    state.leaderboard = data || [];
+  } else {
+    const { data } = await sb.from("course_leaderboard").select("*").eq("course_id", state.lbCourseFilter).order("modules_completed", { ascending: false });
+    state.leaderboard = data || [];
+  }
 }
 async function loadFeed() {
   const { data } = await sb.from("feed_posts").select("*, profiles(full_name, email)").order("created_at", { ascending: false });
@@ -294,10 +298,6 @@ async function postToFeed(content) {
 async function likePost(post) {
   await sb.from("feed_posts").update({ likes_count: (post.likes_count || 0) + 1 }).eq("id", post.id);
   post.likes_count = (post.likes_count || 0) + 1; render();
-}
-async function loadLearnerStats() {
-  const { data, error } = await sb.rpc("get_learner_stats");
-  state.learnerStats = error ? [] : (data || []);
 }
 
 function computeXP() {
@@ -327,8 +327,7 @@ function render() {
   if (state.screen === "loading") { el.appendChild(renderLoading()); return; }
   if (state.screen === "login") { el.appendChild(renderLogin()); return; }
   if (state.screen === "concept" || state.screen === "quiz" || state.screen === "mission") { el.appendChild(renderLesson()); return; }
-  if (state.mode === "stakeholder" && state.role === "admin") { el.appendChild(renderStakeholder()); return; }
-  if (state.mode === "stakeholder") { state.mode = "trainee"; }
+  if (state.screen === "discussion") { el.appendChild(renderDiscussion()); return; }
   if (state.activeTab === "home") el.appendChild(renderHome());
   else if (state.activeTab === "feed") el.appendChild(renderFeed());
   else if (state.activeTab === "journey") el.appendChild(renderJourney());
@@ -372,19 +371,11 @@ function topStats() {
   `;
   const container = document.createElement("div");
   container.appendChild(wrap);
-  const row = document.createElement("div"); row.style.cssText = "padding:0 20px 8px; display:flex; justify-content:space-between; align-items:center;";
+  const row = document.createElement("div"); row.style.cssText = "padding:0 20px 8px; display:flex; justify-content:flex-end;";
   const signOutBtn = document.createElement("button"); signOutBtn.className = "mode-link";
   signOutBtn.textContent = "Sign out";
-  signOutBtn.onclick = async () => { await sb.auth.signOut(); state.screen = "login"; state.user = null; state.role = "learner"; alreadyLoaded = false; render(); };
+  signOutBtn.onclick = async () => { await sb.auth.signOut(); state.screen = "login"; state.user = null; alreadyLoaded = false; render(); };
   row.appendChild(signOutBtn);
-  if (state.role === "admin") {
-    const modeBtn = document.createElement("button"); modeBtn.className = "mode-link";
-    modeBtn.textContent = "Stakeholder view";
-    modeBtn.onclick = async () => { state.mode = "stakeholder"; await loadLearnerStats(); render(); };
-    row.appendChild(modeBtn);
-  } else {
-    row.appendChild(document.createElement("span"));
-  }
   container.appendChild(row);
   return container;
 }
@@ -407,7 +398,12 @@ function renderHome() {
     matches.slice(0, 8).forEach(m => {
       const row = document.createElement("div"); row.style.cssText = "padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--line); font-size:13px;";
       row.innerHTML = `<strong>${m.title}</strong><br><span style="font-size:11px;color:var(--ink-soft);">${m.courseTitle}</span>`;
-      row.onclick = () => { searchInput.value = ""; resultsBox.style.display = "none"; openModule(m.courseId, m); };
+      row.onclick = () => {
+        searchInput.value = ""; resultsBox.style.display = "none";
+        const flat = visibleFlatModules(); const idx = flat.findIndex(fm => fm.id === m.id);
+        if (isModuleUnlocked(idx, flat)) openModule(m.courseId, m);
+        else alert("This lesson isn't unlocked yet, finish what's due first and come back tomorrow.");
+      };
       resultsBox.appendChild(row);
     });
     resultsBox.style.display = "block";
@@ -431,8 +427,15 @@ function renderHome() {
   const next = findNextModule();
   if (next) {
     const flat = visibleFlatModules(); const dayNum = flat.findIndex(m => m.id === next.id) + 1;
-    const hero = document.createElement("div"); hero.className = "hero-card"; hero.onclick = () => openModule(next.courseId, next);
-    hero.innerHTML = `<div class="hicon">\u26A1</div><p style="font-size:11px; font-weight:700; text-transform:uppercase; opacity:0.75; margin:0 0 2px;">Day ${dayNum} &middot; ${next.courseTitle}</p><h3>${next.title}</h3><div class="meta"><span>&#9200; ${next.readTime || ""}</span><span>+150 XP</span></div>`;
+    const unlocked = isModuleUnlocked(dayNum - 1, flat);
+    const hero = document.createElement("div"); hero.className = "hero-card";
+    if (unlocked) {
+      hero.onclick = () => openModule(next.courseId, next);
+      hero.innerHTML = `<div class="hicon">\u26A1</div><p style="font-size:11px; font-weight:700; text-transform:uppercase; opacity:0.75; margin:0 0 2px;">Day ${dayNum} &middot; ${next.courseTitle}</p><h3>${next.title}</h3><div class="meta"><span>&#9200; ${next.readTime || ""}</span><span>+150 XP</span></div>`;
+    } else {
+      hero.style.cursor = "default"; hero.style.opacity = "0.6";
+      hero.innerHTML = `<div class="hicon">\uD83D\uDD12</div><p style="font-size:11px; font-weight:700; text-transform:uppercase; opacity:0.75; margin:0 0 2px;">Day ${dayNum} &middot; ${next.courseTitle}</p><h3>${next.title}</h3><div class="meta"><span>Unlocks tomorrow, come back to keep your streak going</span></div>`;
+    }
     screen.appendChild(hero);
   } else { screen.innerHTML += '<p class="empty">All caught up. New content coming soon.</p>'; }
 
@@ -520,12 +523,16 @@ function renderJourney() {
   flat.forEach((m, i) => {
     const progress = state.progressMap[m.id];
     const isDone = progress && progress.mission_done;
-    const isCurrent = !isDone && !reachedCurrent;
-    if (isCurrent) reachedCurrent = true;
+    const isNext = !isDone && !reachedCurrent;
+    if (isNext) reachedCurrent = true;
+    const unlocked = isNext && isModuleUnlocked(i, flat);
     const row = document.createElement("div");
-    row.className = "journey-row " + (isDone ? "done" : isCurrent ? "current" : "locked");
-    if (isCurrent) row.onclick = () => openModule(m.courseId, m);
-    row.innerHTML = `<div class="journey-dot">${isDone ? "\u2713" : i + 1}</div><div style="flex:1;"><p style="font-size:14px; font-weight:700; margin:0 0 2px;">${m.title}</p><p style="font-size:11px; color:var(--ink-soft); margin:0;">&#9200; ${m.readTime || ""} &nbsp; \u26A1 +150 XP</p></div>`;
+    row.className = "journey-row " + (isDone ? "done" : unlocked ? "current" : "locked");
+    if (unlocked) row.onclick = () => openModule(m.courseId, m);
+    const subline = isDone ? `&#9200; ${m.readTime || ""} &nbsp; \u26A1 +150 XP`
+      : isNext && !unlocked ? "\uD83D\uDD12 Unlocks tomorrow"
+      : `&#9200; ${m.readTime || ""} &nbsp; \u26A1 +150 XP`;
+    row.innerHTML = `<div class="journey-dot">${isDone ? "\u2713" : i + 1}</div><div style="flex:1;"><p style="font-size:14px; font-weight:700; margin:0 0 2px;">${m.title}</p><p style="font-size:11px; color:var(--ink-soft); margin:0;">${subline}</p></div>`;
     screen.appendChild(row);
   });
   wrap.appendChild(screen); return wrap;
@@ -535,57 +542,85 @@ function renderBadges() {
   const wrap = document.createElement("div"); wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
   const xp = computeXP(); const li = levelInfo(xp);
-  const earnedCount = BADGES.filter(b => b.check(state)).length;
-  screen.innerHTML = `<h1>Achievements</h1><p class="subtitle">${earnedCount} of ${BADGES.length} badges unlocked</p>`;
+  screen.innerHTML = `<h1>Achievements</h1><p class="subtitle">Loading...</p>`;
+  wrap.appendChild(screen);
 
-  const levelCard = document.createElement("div"); levelCard.className = "level-card";
-  levelCard.innerHTML = `<div class="level-row"><span style="font-size:13px;font-weight:700;">Current level: ${li.name}</span></div><div class="level-track"><div class="level-fill" style="width:${Math.round(li.progress*100)}%;"></div></div><p style="font-size:11px; color:var(--ink-soft); margin:6px 0 0;">${li.next ? li.next.name + " in " + li.xpToNext + " XP" : "Top level reached"}</p>`;
-  screen.appendChild(levelCard);
+  Promise.all([loadAchievements(), loadMyDiscussionCount()]).then(() => {
+    screen.innerHTML = "";
+    const earnedCount = state.achievements.filter(a => achievementEarned(a)).length;
+    screen.innerHTML = `<h1>Achievements</h1><p class="subtitle">${earnedCount} of ${state.achievements.length} unlocked</p>`;
 
-  const quizzesDone = Object.values(state.progressMap).filter(m => m.selected_index !== undefined && m.selected_index !== null).length;
-  const missionsDone = Object.values(state.progressMap).filter(m => m.mission_done).length;
-  const statGrid = document.createElement("div"); statGrid.className = "stat-grid";
-  statGrid.innerHTML = `
-    <div class="stat-tile"><p class="slabel">\u26A1 Power Points</p><p class="sval">${xp}</p></div>
-    <div class="stat-tile"><p class="slabel">\uD83D\uDD25 Best Streak</p><p class="sval">${state.longestStreak} days</p></div>
-    <div class="stat-tile"><p class="slabel">\uD83D\uDCD6 Lessons Done</p><p class="sval">${quizzesDone}/${totalModuleCount()}</p></div>
-    <div class="stat-tile"><p class="slabel">\uD83C\uDFAF Missions</p><p class="sval">${missionsDone}</p></div>
-  `;
-  screen.appendChild(statGrid);
+    const levelCard = document.createElement("div"); levelCard.className = "level-card";
+    levelCard.innerHTML = `<div class="level-row"><span style="font-size:13px;font-weight:700;">Current level: ${li.name}</span></div><div class="level-track"><div class="level-fill" style="width:${Math.round(li.progress*100)}%;"></div></div><p style="font-size:11px; color:var(--ink-soft); margin:6px 0 0;">${li.next ? li.next.name + " in " + li.xpToNext + " XP" : "Top level reached"}</p>`;
+    screen.appendChild(levelCard);
 
-  const h = document.createElement("h2"); h.textContent = "Badge collection"; screen.appendChild(h);
-  const grid = document.createElement("div"); grid.className = "badge-grid";
-  BADGES.forEach(b => {
-    const earned = b.check(state);
-    const tile = document.createElement("div"); tile.className = "badge-tile" + (earned ? "" : " locked");
-    tile.innerHTML = `<div class="bicon">${b.icon}</div><p class="bname">${b.name}</p><p class="bdesc">${b.desc}</p>`;
-    grid.appendChild(tile);
+    const quizzesDone = Object.values(state.progressMap).filter(m => m.selected_index !== undefined && m.selected_index !== null).length;
+    const missionsDone = Object.values(state.progressMap).filter(m => m.mission_done).length;
+    const statGrid = document.createElement("div"); statGrid.className = "stat-grid";
+    statGrid.innerHTML = `
+      <div class="stat-tile"><p class="slabel">\u26A1 Power Points</p><p class="sval">${xp}</p></div>
+      <div class="stat-tile"><p class="slabel">\uD83D\uDD25 Best Streak</p><p class="sval">${state.longestStreak} days</p></div>
+      <div class="stat-tile"><p class="slabel">\uD83D\uDCD6 Lessons Done</p><p class="sval">${quizzesDone}/${totalModuleCount()}</p></div>
+      <div class="stat-tile"><p class="slabel">\uD83C\uDFAF Missions</p><p class="sval">${missionsDone}</p></div>
+    `;
+    screen.appendChild(statGrid);
+
+    const h = document.createElement("h2"); h.textContent = "Badge collection"; screen.appendChild(h);
+    if (state.achievements.length === 0) {
+      const p = document.createElement("p"); p.className = "empty"; p.textContent = "No achievements set up yet, ask your admin to add some."; screen.appendChild(p);
+    }
+    const grid = document.createElement("div"); grid.className = "badge-grid";
+    state.achievements.forEach(a => {
+      const earned = achievementEarned(a);
+      const tile = document.createElement("div"); tile.className = "badge-tile" + (earned ? "" : " locked");
+      tile.innerHTML = `<div class="bicon">${a.icon || "\uD83C\uDFC5"}</div><p class="bname">${a.name}</p><p class="bdesc">${a.description || ""}</p>`;
+      grid.appendChild(tile);
+    });
+    screen.appendChild(grid);
   });
-  screen.appendChild(grid);
-  wrap.appendChild(screen); return wrap;
+
+  return wrap;
+}
+
+async function loadMyTeammateIds() {
+  if (!state.userGroupIds || state.userGroupIds.length === 0) { state.teammateIds = new Set([state.user.id]); return; }
+  const { data } = await sb.from("group_members").select("user_id").in("group_id", state.userGroupIds);
+  const ids = new Set((data || []).map(r => r.user_id));
+  ids.add(state.user.id);
+  state.teammateIds = ids;
 }
 
 function renderRanks() {
   const wrap = document.createElement("div"); wrap.appendChild(topStats());
   const screen = document.createElement("div"); screen.className = "screen";
   screen.innerHTML = `<h1>Leaderboard</h1><p class="subtitle">Compete, climb, power up together</p>`;
+
+  const courseChips = document.createElement("div"); courseChips.className = "filter-scroll";
+  const chipDefs = [["overall", "Overall"], ...Object.keys(state.courses).map(id => [id, state.courses[id].title])];
+  chipDefs.forEach(([id, label]) => {
+    const chip = document.createElement("div"); chip.className = "filter-chip" + (state.lbCourseFilter === id ? " active" : "");
+    chip.textContent = label; chip.onclick = () => { state.lbCourseFilter = id; render(); };
+    courseChips.appendChild(chip);
+  });
+  screen.appendChild(courseChips);
+
   const toggle = document.createElement("div"); toggle.className = "lb-toggle";
-  ["individuals", "teams"].forEach(m => {
+  ["individuals", "team"].forEach(m => {
     const b = document.createElement("button"); b.className = state.lbMode === m ? "active" : "";
-    b.textContent = m === "individuals" ? "\u26A1 Individuals" : "Teams";
+    b.textContent = m === "individuals" ? "\u26A1 Everyone" : "My team";
     b.onclick = () => { state.lbMode = m; render(); };
     toggle.appendChild(b);
   });
   screen.appendChild(toggle);
 
-  if (state.lbMode === "teams") { screen.innerHTML += '<p class="empty">Team leaderboards are coming soon.</p>'; wrap.appendChild(screen); return wrap; }
-
   const listWrap = document.createElement("div"); listWrap.innerHTML = '<p class="empty">Loading...</p>';
   screen.appendChild(listWrap);
-  loadLeaderboard().then(() => {
+  Promise.all([loadLeaderboard(), loadMyTeammateIds()]).then(() => {
     listWrap.innerHTML = "";
-    if (state.leaderboard.length === 0) { listWrap.innerHTML = '<p class="empty">No activity yet.</p>'; return; }
-    state.leaderboard.forEach((person, i) => {
+    let rows = state.leaderboard;
+    if (state.lbMode === "team") rows = rows.filter(p => state.teammateIds.has(p.user_id));
+    if (rows.length === 0) { listWrap.innerHTML = state.lbMode === "team" ? '<p class="empty">You\'re not in a group yet, ask your admin to add you to one.</p>' : '<p class="empty">No activity yet.</p>'; return; }
+    rows.forEach((person, i) => {
       const isMe = person.user_id === state.user.id;
       const row = document.createElement("div"); row.className = "lb-row" + (isMe ? " me" : "");
       const initials = (person.display_name || "?").slice(0, 2).toUpperCase();
@@ -665,6 +700,9 @@ function renderLesson() {
       const next = flat[dayNum]; openModule(next.courseId, next);
     };
     screen.appendChild(btn);
+    const discussBtn = document.createElement("button"); discussBtn.className = "secondary-btn"; discussBtn.textContent = "\uD83D\uDCAC Discuss this lesson";
+    discussBtn.onclick = () => { state.discussionModuleId = mod.id; state.discussionCourseId = state.courseId; state.discussionModTitle = mod.title; state.screen = "discussion"; render(); };
+    screen.appendChild(discussBtn);
     const skip = document.createElement("button"); skip.className = "secondary-btn"; skip.textContent = "Back to dashboard";
     skip.onclick = () => { state.screen = "home"; render(); };
     screen.appendChild(skip);
@@ -822,130 +860,77 @@ function renderSaved() {
   wrap.appendChild(screen); return wrap;
 }
 
-async function loadAdminGroupsData() {
-  const { data: groups } = await sb.from("groups").select("*").order("created_at");
-  const { data: members } = await sb.from("group_members").select("*, profiles(email)");
-  const { data: assignments } = await sb.from("assignments").select("*, courses(title), profiles(email)");
-  state.adminGroups = groups || [];
-  state.adminGroupMembers = members || [];
-  state.adminAssignments = assignments || [];
+async function loadDiscussion(moduleId) {
+  const { data } = await sb.from("discussion_posts").select("*, profiles(full_name, email)").eq("module_id", moduleId).order("created_at", { ascending: true });
+  state.discussionPosts = data || [];
 }
-async function createGroup(name) {
-  if (!name) return;
-  await sb.from("groups").insert({ name });
-  await loadAdminGroupsData(); render();
+async function postDiscussion(moduleId, content, parentId) {
+  if (!content || !content.trim()) return;
+  await sb.from("discussion_posts").insert({ module_id: moduleId, user_id: state.user.id, content: content.trim(), parent_id: parentId || null });
+  state.discussionDraft = ""; state.replyDraft = {}; state.replyOpenFor = null;
+  await loadDiscussion(moduleId); render();
 }
-async function deleteGroup(id) {
-  await sb.from("groups").delete().eq("id", id);
-  await loadAdminGroupsData(); render();
-}
-async function addMemberToGroup(groupId, email) {
-  if (!email) return;
-  const { data: prof } = await sb.from("profiles").select("id").eq("email", email).maybeSingle();
-  if (!prof) { alert("No account found for that email yet. They need to sign in at least once first."); return; }
-  await sb.from("group_members").insert({ group_id: groupId, user_id: prof.id });
-  await loadAdminGroupsData(); render();
-}
-async function removeMemberFromGroup(groupId, userId) {
-  await sb.from("group_members").delete().eq("group_id", groupId).eq("user_id", userId);
-  await loadAdminGroupsData(); render();
-}
-async function createAssignment(form) {
-  let userId = null;
-  if (form.email) {
-    const { data: prof } = await sb.from("profiles").select("id").eq("email", form.email).maybeSingle();
-    if (!prof) { alert("No account found for that email yet. They need to sign in at least once first."); return; }
-    userId = prof.id;
-  }
-  await sb.from("assignments").insert({ course_id: form.courseId, group_id: form.groupId || null, user_id: userId, due_date: form.dueDate || null });
-  await loadAdminGroupsData(); render();
-}
-async function deleteAssignment(id) {
-  await sb.from("assignments").delete().eq("id", id);
-  await loadAdminGroupsData(); render();
-}
+function renderDiscussion() {
+  const wrap = document.createElement("div");
+  const top = document.createElement("div"); top.className = "topbar";
+  const back = document.createElement("button"); back.className = "icon-btn"; back.innerHTML = "&#8592;";
+  back.onclick = () => { state.screen = "mission"; render(); };
+  top.appendChild(back);
+  const lab = document.createElement("span"); lab.className = "label"; lab.textContent = "Discussion";
+  top.appendChild(lab); top.appendChild(document.createElement("span"));
+  wrap.appendChild(top);
+  const screen = document.createElement("div"); screen.className = "screen";
+  const h = document.createElement("h1"); h.style.fontSize = "17px"; h.textContent = state.discussionModTitle || ""; screen.appendChild(h);
+  const sub = document.createElement("p"); sub.className = "subtitle"; sub.textContent = "Share what worked, ask questions, compare notes"; screen.appendChild(sub);
 
-function renderStakeGroups(screen) {
-  screen.innerHTML = `<h1>Groups &amp; Assignments</h1><p class="subtitle">Control who sees which courses. If nothing's assigned, everyone sees everything.</p>`;
-  const body = document.createElement("div"); body.innerHTML = '<p class="empty">Loading...</p>';
-  screen.appendChild(body);
-  loadAdminGroupsData().then(() => {
-    body.innerHTML = "";
+  const compose = document.createElement("div"); compose.className = "compose-card";
+  const input = document.createElement("input"); input.placeholder = "Add to the discussion...";
+  input.oninput = e => { state.discussionDraft = e.target.value; };
+  compose.appendChild(input);
+  const postBtn = document.createElement("button"); postBtn.textContent = "POST";
+  postBtn.onclick = () => postDiscussion(state.discussionModuleId, input.value, null);
+  compose.appendChild(postBtn);
+  screen.appendChild(compose);
 
-    const groupForm = document.createElement("div"); groupForm.className = "form-card";
-    groupForm.innerHTML = `<div class="card-label">Create a group</div><label>Group name</label><input id="g-name" placeholder="e.g. Sales team">`;
-    const gBtn = document.createElement("button"); gBtn.className = "primary-btn"; gBtn.style.marginTop = "10px"; gBtn.textContent = "Create group";
-    gBtn.onclick = () => createGroup(groupForm.querySelector("#g-name").value.trim());
-    groupForm.appendChild(gBtn);
-    body.appendChild(groupForm);
-
-    const h2 = document.createElement("h2"); h2.textContent = "Groups"; body.appendChild(h2);
-    if (state.adminGroups.length === 0) {
-      const p = document.createElement("p"); p.className = "empty"; p.textContent = "No groups yet."; body.appendChild(p);
-    }
-    state.adminGroups.forEach(g => {
-      const members = state.adminGroupMembers.filter(m => m.group_id === g.id);
-      const row = document.createElement("div"); row.className = "content-row";
-      row.innerHTML = `<div><p class="cname">${g.name}</p><p class="csub">${members.length} member${members.length === 1 ? "" : "s"}</p></div>`;
-      const del = document.createElement("button"); del.className = "delete-btn"; del.textContent = "Delete group";
-      del.onclick = () => { if (confirm(`Delete group "${g.name}"?`)) deleteGroup(g.id); };
-      row.appendChild(del);
-      body.appendChild(row);
-      members.forEach(m => {
-        const mrow = document.createElement("div"); mrow.className = "content-row"; mrow.style.marginLeft = "16px";
-        mrow.innerHTML = `<div><p class="cname">${m.profiles ? m.profiles.email : m.user_id}</p></div>`;
-        const rem = document.createElement("button"); rem.className = "delete-btn"; rem.textContent = "Remove";
-        rem.onclick = () => removeMemberFromGroup(g.id, m.user_id);
-        mrow.appendChild(rem);
-        body.appendChild(mrow);
+  const listWrap = document.createElement("div"); listWrap.innerHTML = '<p class="empty">Loading...</p>';
+  screen.appendChild(listWrap);
+  loadDiscussion(state.discussionModuleId).then(() => {
+    listWrap.innerHTML = "";
+    const topLevel = state.discussionPosts.filter(p => !p.parent_id);
+    if (topLevel.length === 0) { listWrap.innerHTML = '<p class="empty">No comments yet, start the conversation.</p>'; return; }
+    topLevel.forEach(p => {
+      const name = (p.profiles && (p.profiles.full_name || p.profiles.email.split("@")[0])) || "Learner";
+      const isMe = p.user_id === state.user.id;
+      const card = document.createElement("div"); card.className = "post-card";
+      card.innerHTML = `<div class="post-head"><div class="post-avatar">${name.slice(0,2).toUpperCase()}</div><span class="post-name">${isMe ? "You" : name}</span></div><p class="post-text">${p.content}</p>`;
+      const replies = state.discussionPosts.filter(r => r.parent_id === p.id);
+      replies.forEach(r => {
+        const rname = (r.profiles && (r.profiles.full_name || r.profiles.email.split("@")[0])) || "Learner";
+        const rIsMe = r.user_id === state.user.id;
+        const rBlock = document.createElement("div"); rBlock.className = "reply-block";
+        rBlock.innerHTML = `<div class="post-head"><div class="post-avatar" style="width:20px;height:20px;font-size:9px;">${rname.slice(0,2).toUpperCase()}</div><span class="post-name" style="font-size:11.5px;">${rIsMe ? "You" : rname}</span></div><p class="post-text" style="font-size:12px;">${r.content}</p>`;
+        card.appendChild(rBlock);
       });
-      const addWrap = document.createElement("div"); addWrap.style.cssText = "display:flex; gap:8px; margin:6px 0 14px 16px;";
-      const emailInput = document.createElement("input"); emailInput.placeholder = "learner@email.com";
-      emailInput.style.cssText = "flex:1; background:var(--surface); border:1px solid var(--line); color:var(--ink); border-radius:10px; padding:8px 10px; font-size:12px;";
-      const addBtn = document.createElement("button"); addBtn.className = "secondary-btn"; addBtn.style.cssText = "margin-top:0; width:auto; padding:8px 14px;"; addBtn.textContent = "Add";
-      addBtn.onclick = () => addMemberToGroup(g.id, emailInput.value.trim());
-      addWrap.appendChild(emailInput); addWrap.appendChild(addBtn);
-      body.appendChild(addWrap);
-    });
-
-    const assignForm = document.createElement("div"); assignForm.className = "form-card";
-    const courseOpts = Object.keys(state.courses).map(id => `<option value="${id}">${state.courses[id].title}</option>`).join("");
-    const groupOpts = state.adminGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join("");
-    assignForm.innerHTML = `
-      <div class="card-label">Assign a course</div>
-      <label>Course</label><select id="a-course">${courseOpts}</select>
-      <label>Group (leave as "no group" to assign to one person instead)</label>
-      <select id="a-group"><option value="">No group, use email below</option>${groupOpts}</select>
-      <label>Or assign to one person by email</label><input id="a-email" placeholder="learner@email.com">
-      <label>Due date (optional)</label><input id="a-due" type="date">
-    `;
-    const aBtn = document.createElement("button"); aBtn.className = "primary-btn"; aBtn.style.marginTop = "10px"; aBtn.textContent = "Create assignment";
-    aBtn.onclick = () => createAssignment({
-      courseId: assignForm.querySelector("#a-course").value,
-      groupId: assignForm.querySelector("#a-group").value || null,
-      email: assignForm.querySelector("#a-email").value.trim(),
-      dueDate: assignForm.querySelector("#a-due").value || null
-    });
-    assignForm.appendChild(aBtn);
-    body.appendChild(assignForm);
-
-    const h3 = document.createElement("h2"); h3.textContent = "Existing assignments"; body.appendChild(h3);
-    if (state.adminAssignments.length === 0) {
-      const p = document.createElement("p"); p.className = "empty"; p.textContent = "Nothing assigned yet, everyone currently sees every course."; body.appendChild(p);
-    }
-    state.adminAssignments.forEach(a => {
-      const courseTitle = a.courses ? a.courses.title : a.course_id;
-      const groupName = a.group_id ? (state.adminGroups.find(g => g.id === a.group_id) || {}).name : null;
-      const target = a.user_id ? (a.profiles ? a.profiles.email : "a specific person") : (groupName || "a group");
-      const row = document.createElement("div"); row.className = "content-row";
-      row.innerHTML = `<div><p class="cname">${courseTitle}</p><p class="csub">assigned to ${target}${a.due_date ? ", due " + a.due_date : ""}</p></div>`;
-      const del = document.createElement("button"); del.className = "delete-btn"; del.textContent = "Remove";
-      del.onclick = () => deleteAssignment(a.id);
-      row.appendChild(del);
-      body.appendChild(row);
+      const replyLink = document.createElement("button"); replyLink.className = "reply-link"; replyLink.style.marginTop = "6px";
+      replyLink.textContent = state.replyOpenFor === p.id ? "Cancel" : "Reply";
+      replyLink.onclick = () => { state.replyOpenFor = state.replyOpenFor === p.id ? null : p.id; render(); };
+      card.appendChild(replyLink);
+      if (state.replyOpenFor === p.id) {
+        const replyCompose = document.createElement("div"); replyCompose.className = "compose-card"; replyCompose.style.marginTop = "8px"; replyCompose.style.marginBottom = "0";
+        const rInput = document.createElement("input"); rInput.placeholder = "Write a reply...";
+        replyCompose.appendChild(rInput);
+        const rBtn = document.createElement("button"); rBtn.textContent = "POST";
+        rBtn.onclick = () => postDiscussion(state.discussionModuleId, rInput.value, p.id);
+        replyCompose.appendChild(rBtn);
+        card.appendChild(replyCompose);
+      }
+      listWrap.appendChild(card);
     });
   });
+
+  wrap.appendChild(screen); return wrap;
 }
+
 
 function renderTabbar() {
   const bar = document.createElement("div"); bar.className = "tabbar";
@@ -963,258 +948,6 @@ function renderTabbar() {
     bar.appendChild(el);
   });
   return bar;
-}
-
-// ---- Stakeholder dashboard ----
-function renderStakeholder() {
-  const wrap = document.createElement("div");
-  const top = document.createElement("div"); top.className = "topbar";
-  top.innerHTML = `<img src="${LOGO}" alt="" style="height:22px;width:auto;"><button class="mode-link" id="back-to-trainee">Back to trainee view</button>`;
-  wrap.appendChild(top);
-  wrap.querySelector("#back-to-trainee").onclick = () => { state.mode = "trainee"; render(); };
-
-  const nav = document.createElement("div"); nav.className = "stake-nav";
-  [["overview", "Overview"], ["learners", "Learner Progress"], ["content", "Content"], ["groups", "Groups"]].forEach(([id, label]) => {
-    const t = document.createElement("div"); t.className = "stake-tab" + (state.stakeTab === id ? " active" : ""); t.textContent = label;
-    t.onclick = () => { state.stakeTab = id; render(); };
-    nav.appendChild(t);
-  });
-  wrap.appendChild(nav);
-
-  const screen = document.createElement("div"); screen.className = "screen";
-  if (state.stakeTab === "overview") renderStakeOverview(screen);
-  else if (state.stakeTab === "learners") renderStakeLearners(screen);
-  else if (state.stakeTab === "content") renderStakeContent(screen);
-  else renderStakeGroups(screen);
-  wrap.appendChild(screen);
-  return wrap;
-}
-
-function renderStakeOverview(screen) {
-  const totalModules = totalModuleCount();
-  const stats = state.learnerStats;
-  const activeLearners = stats.filter(s => s.quizzes_done > 0).length;
-  const avgCompletion = stats.length ? Math.round(stats.reduce((sum, s) => sum + (s.quizzes_done / totalModules), 0) / stats.length * 100) : 0;
-  const avgQuizScore = (() => {
-    const withQuizzes = stats.filter(s => s.quizzes_done > 0);
-    if (!withQuizzes.length) return 0;
-    return Math.round(withQuizzes.reduce((sum, s) => sum + (s.correct_count / s.quizzes_done), 0) / withQuizzes.length * 100);
-  })();
-
-  screen.innerHTML = `<h1>Emotional Intelligence</h1><p class="subtitle">Pilot cohort &middot; ${stats.length} invited</p>`;
-  const statGrid = document.createElement("div"); statGrid.className = "stat-grid";
-  statGrid.innerHTML = `
-    <div class="stat-tile"><p class="slabel">Active Learners</p><p class="sval">${activeLearners}/${stats.length}</p></div>
-    <div class="stat-tile"><p class="slabel">Completion Rate</p><p class="sval">${avgCompletion}%</p></div>
-    <div class="stat-tile"><p class="slabel">Avg Quiz Score</p><p class="sval">${avgQuizScore}%</p></div>
-    <div class="stat-tile"><p class="slabel">At Risk</p><p class="sval">${stats.filter(s => s.quizzes_done === 0).length}</p></div>
-  `;
-  screen.appendChild(statGrid);
-
-  const h = document.createElement("h2"); h.textContent = "Completion by day"; screen.appendChild(h);
-  const flat = flatModules();
-  const chartCard = document.createElement("div"); chartCard.className = "card";
-  flat.forEach((m, i) => {
-    const completedCount = stats.filter(s => s.quizzes_done > i).length;
-    const pct = stats.length ? Math.round((completedCount / stats.length) * 100) : 0;
-    const row = document.createElement("div"); row.className = "bar-row";
-    row.innerHTML = `<span class="bar-label">D${i+1}</span><div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div><span style="font-size:11px;color:var(--ink-soft);width:32px;text-align:right;">${pct}%</span>`;
-    chartCard.appendChild(row);
-  });
-  if (flat.length === 0) chartCard.innerHTML = '<p class="empty">No modules loaded yet.</p>';
-  screen.appendChild(chartCard);
-
-  const h2 = document.createElement("h2"); h2.textContent = "Top performers"; h2.style.marginTop = "16px"; screen.appendChild(h2);
-  const top3 = [...stats].sort((a, b) => (b.quizzes_done + b.missions_done) - (a.quizzes_done + a.missions_done)).slice(0, 3);
-  if (top3.length === 0) { screen.innerHTML += '<p class="empty">No data yet, learners appear here once active.</p>'; }
-  top3.forEach((s, i) => {
-    const row = document.createElement("div"); row.className = "lb-row";
-    row.innerHTML = `<span class="lb-rank">${i+1}</span><div class="lb-avatar">${(s.display_name||"?").slice(0,2).toUpperCase()}</div><div style="flex:1;"><p class="lb-name">${s.display_name}</p><p class="lb-sub">${s.quizzes_done} lessons &middot; ${s.missions_done} missions</p></div>`;
-    screen.appendChild(row);
-  });
-}
-
-function renderStakeLearners(screen) {
-  screen.innerHTML = `<h1>Learner Progress</h1><p class="subtitle">Pilot cohort</p>`;
-  const totalModules = totalModuleCount();
-  const filters = document.createElement("div"); filters.className = "filter-scroll";
-  [["all","All"],["progress","In Progress"],["atrisk","At Risk"],["completed","Completed"]].forEach(([id,label]) => {
-    const chip = document.createElement("div"); chip.className = "filter-chip" + (state.learnerFilter === id ? " active" : "");
-    chip.textContent = label; chip.onclick = () => { state.learnerFilter = id; render(); };
-    filters.appendChild(chip);
-  });
-  screen.appendChild(filters);
-
-  const rows = state.learnerStats.map(s => {
-    const completion = totalModules ? Math.round((s.quizzes_done / totalModules) * 100) : 0;
-    let status = "progress";
-    if (s.quizzes_done === 0) status = "atrisk";
-    else if (completion >= 100) status = "completed";
-    return { ...s, completion, status };
-  }).filter(r => state.learnerFilter === "all" || r.status === state.learnerFilter);
-
-  if (rows.length === 0) { screen.innerHTML += '<p class="empty">No learners in this view yet.</p>'; return; }
-
-  const table = document.createElement("table"); table.className = "learner-table";
-  table.innerHTML = `<thead><tr><th>Learner</th><th>XP</th><th>Streak</th><th>Completion</th><th>Status</th></tr></thead>`;
-  const tbody = document.createElement("tbody");
-  rows.forEach(r => {
-    const xp = r.quizzes_done * 100 + r.missions_done * 50;
-    const statusLabel = r.status === "completed" ? "Completed" : r.status === "atrisk" ? "At Risk" : "In Progress";
-    const statusClass = r.status === "completed" ? "status-completed" : r.status === "atrisk" ? "status-atrisk" : "status-progress";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.display_name}</td><td>${xp}</td><td>${r.current_streak}d</td><td>${r.completion}%</td><td><span class="status-pill ${statusClass}">${statusLabel}</span></td>`;
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  screen.appendChild(table);
-}
-
-async function addCourse(id, title, icon) {
-  if (!id || !title) return;
-  await sb.from("courses").insert({ id, title, icon, sort_order: Object.keys(state.courses).length + 1 });
-  await loadEverything(); state.mode = "stakeholder"; state.stakeTab = "content"; render();
-}
-async function deleteCourse(id) {
-  await sb.from("courses").delete().eq("id", id);
-  await loadEverything(); state.mode = "stakeholder"; state.stakeTab = "content"; render();
-}
-async function addModule(form) {
-  if (!form.id || !form.courseId || !form.title || !form.quizQuestion) return;
-  const payload = {
-    id: form.id, course_id: form.courseId, title: form.title, read_content: form.read,
-    read_time: form.readTime, tip: form.tip, quiz_question: form.quizQuestion,
-    question_type: form.questionType,
-    sort_order: (state.courses[form.courseId] ? state.courses[form.courseId].modules.length : 0) + 1
-  };
-  if (form.questionType === "multiple_choice") {
-    payload.quiz_options = JSON.stringify([form.opt1, form.opt2, form.opt3].filter(Boolean));
-    payload.quiz_correct_index = parseInt(form.correctIndex, 10) || 0;
-  } else if (form.questionType === "true_false") {
-    payload.quiz_options = JSON.stringify(["True", "False"]);
-    payload.quiz_correct_index = form.tfAnswer === "false" ? 1 : 0;
-  } else if (form.questionType === "multi_select") {
-    payload.quiz_options = JSON.stringify([form.opt1, form.opt2, form.opt3].filter(Boolean));
-    payload.quiz_correct_indices = JSON.stringify(
-      (form.correctIndex || "").split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
-    );
-  } else if (form.questionType === "match") {
-    const pairs = (form.matchPairs || []).filter(p => p.left && p.right);
-    payload.match_pairs = JSON.stringify(pairs);
-    payload.quiz_options = JSON.stringify([]);
-  }
-  await sb.from("modules").insert(payload);
-  await loadEverything(); state.mode = "stakeholder"; state.stakeTab = "content"; render();
-}
-async function deleteModule(id) {
-  await sb.from("modules").delete().eq("id", id);
-  await loadEverything(); state.mode = "stakeholder"; state.stakeTab = "content"; render();
-}
-
-function renderStakeContent(screen) {
-  screen.innerHTML = `<h1>Content</h1><p class="subtitle">Add or remove courses and modules</p>`;
-
-  const courseForm = document.createElement("div"); courseForm.className = "form-card";
-  courseForm.innerHTML = `
-    <div class="card-label">Add a course</div>
-    <label>Course ID (short, no spaces)</label><input id="c-id" placeholder="e.g. timemgmt">
-    <label>Title</label><input id="c-title" placeholder="e.g. Time Management">
-    <label>Icon (one emoji)</label><input id="c-icon" placeholder="e.g. \u23F1\uFE0F">
-  `;
-  const courseBtn = document.createElement("button"); courseBtn.className = "primary-btn"; courseBtn.style.marginTop = "10px"; courseBtn.textContent = "Add course";
-  courseBtn.onclick = () => addCourse(
-    courseForm.querySelector("#c-id").value.trim(),
-    courseForm.querySelector("#c-title").value.trim(),
-    courseForm.querySelector("#c-icon").value.trim()
-  );
-  courseForm.appendChild(courseBtn);
-  screen.appendChild(courseForm);
-
-  const moduleForm = document.createElement("div"); moduleForm.className = "form-card";
-  const courseOptions = Object.keys(state.courses).map(id => `<option value="${id}">${state.courses[id].title}</option>`).join("");
-  moduleForm.innerHTML = `
-    <div class="card-label">Add a module</div>
-    <label>Course</label><select id="m-course">${courseOptions}</select>
-    <label>Module ID (short, no spaces)</label><input id="m-id" placeholder="e.g. timemgmt-3">
-    <label>Title</label><input id="m-title" placeholder="e.g. Batching your day">
-    <label>Concept (the short read)</label><textarea id="m-read"></textarea>
-    <label>Read time</label><input id="m-time" placeholder="e.g. 2 min read">
-    <label>Real-world mission</label><textarea id="m-tip"></textarea>
-    <label>Quiz question</label><input id="m-q">
-    <label>Question type</label>
-    <select id="m-qtype">
-      <option value="multiple_choice">Multiple choice (one correct answer)</option>
-      <option value="true_false">True / False</option>
-      <option value="multi_select">Multiple correct answers</option>
-      <option value="match">Tap-to-match</option>
-    </select>
-    <div id="m-fields-mc-ms">
-      <label>Option 1</label><input id="m-o1">
-      <label>Option 2</label><input id="m-o2">
-      <label>Option 3</label><input id="m-o3">
-      <label id="m-correct-label">Correct option (0, 1, or 2)</label><input id="m-correct" placeholder="0">
-    </div>
-    <div id="m-fields-tf" style="display:none;">
-      <label>Correct answer</label>
-      <select id="m-tf"><option value="true">True</option><option value="false">False</option></select>
-    </div>
-    <div id="m-fields-match" style="display:none;">
-      <label>Pairs (one per line, formatted as: term = match)</label>
-      <textarea id="m-pairs" placeholder="Active listening = Repeating back what you heard&#10;Feedback = Behavior, impact, ask"></textarea>
-    </div>
-  `;
-  const qtypeSelect = moduleForm.querySelector("#m-qtype");
-  qtypeSelect.onchange = () => {
-    const t = qtypeSelect.value;
-    moduleForm.querySelector("#m-fields-mc-ms").style.display = (t === "multiple_choice" || t === "multi_select") ? "" : "none";
-    moduleForm.querySelector("#m-fields-tf").style.display = t === "true_false" ? "" : "none";
-    moduleForm.querySelector("#m-fields-match").style.display = t === "match" ? "" : "none";
-    moduleForm.querySelector("#m-correct-label").textContent = t === "multi_select" ? "Correct options, comma separated (e.g. 0,2)" : "Correct option (0, 1, or 2)";
-  };
-  const moduleBtn = document.createElement("button"); moduleBtn.className = "primary-btn"; moduleBtn.style.marginTop = "10px"; moduleBtn.textContent = "Add module";
-  moduleBtn.onclick = () => {
-    const qtype = moduleForm.querySelector("#m-qtype").value;
-    const matchPairs = moduleForm.querySelector("#m-pairs").value.split("\n")
-      .map(line => { const [left, right] = line.split("="); return { left: (left || "").trim(), right: (right || "").trim() }; })
-      .filter(p => p.left && p.right);
-    addModule({
-      courseId: moduleForm.querySelector("#m-course").value,
-      id: moduleForm.querySelector("#m-id").value.trim(),
-      title: moduleForm.querySelector("#m-title").value.trim(),
-      read: moduleForm.querySelector("#m-read").value.trim(),
-      readTime: moduleForm.querySelector("#m-time").value.trim(),
-      tip: moduleForm.querySelector("#m-tip").value.trim(),
-      quizQuestion: moduleForm.querySelector("#m-q").value.trim(),
-      questionType: qtype,
-      opt1: moduleForm.querySelector("#m-o1").value.trim(),
-      opt2: moduleForm.querySelector("#m-o2").value.trim(),
-      opt3: moduleForm.querySelector("#m-o3").value.trim(),
-      correctIndex: moduleForm.querySelector("#m-correct").value.trim(),
-      tfAnswer: moduleForm.querySelector("#m-tf").value,
-      matchPairs: matchPairs
-    });
-  };
-  moduleForm.appendChild(moduleBtn);
-  screen.appendChild(moduleForm);
-
-  const h = document.createElement("h2"); h.textContent = "Existing content"; screen.appendChild(h);
-  Object.keys(state.courses).forEach(cid => {
-    const course = state.courses[cid];
-    const row = document.createElement("div"); row.className = "content-row";
-    row.innerHTML = `<div><p class="cname">${course.icon || ""} ${course.title}</p><p class="csub">${course.modules.length} modules</p></div>`;
-    const del = document.createElement("button"); del.className = "delete-btn"; del.textContent = "Delete course";
-    del.onclick = () => { if (confirm(`Delete "${course.title}" and all its modules?`)) deleteCourse(cid); };
-    row.appendChild(del);
-    screen.appendChild(row);
-    course.modules.forEach(m => {
-      const mrow = document.createElement("div"); mrow.className = "content-row"; mrow.style.marginLeft = "16px";
-      mrow.innerHTML = `<div><p class="cname">${m.title}</p><p class="csub">${m.id}</p></div>`;
-      const mdel = document.createElement("button"); mdel.className = "delete-btn"; mdel.textContent = "Delete";
-      mdel.onclick = () => { if (confirm(`Delete module "${m.title}"?`)) deleteModule(m.id); };
-      mrow.appendChild(mdel);
-      screen.appendChild(mrow);
-    });
-  });
 }
 
 init();
