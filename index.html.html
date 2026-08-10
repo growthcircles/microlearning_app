@@ -185,7 +185,7 @@ async function loadMyDiscussionCount() {
 let state = {
   screen: "loading", user: null, courses: {}, progressMap: {}, streak: 0, longestStreak: 0,
   courseId: null, moduleIndex: 0, answered: false, selected: null, missionText: "",
-  leaderboard: [], loginStatus: "", activeTab: "home",
+  leaderboard: [], loginStatus: "", activeTab: "home", loginStep: "email", pendingEmail: "",
   feedPosts: [], feedFilter: "all", feedDraft: "", lbMode: "individuals", lbCourseFilter: "overall",
   achievements: [], myDiscussionCount: 0, discussionPosts: [], discussionDraft: "", replyDraft: {}, replyOpenFor: null
 };
@@ -268,11 +268,21 @@ function isModuleUnlocked(index, flat) {
   return completedDate < today;
 }
 
-async function sendMagicLink(email) {
-  state.loginStatus = "Sending link..."; render();
+async function sendLoginCode(email) {
+  state.loginStatus = "Sending code..."; render();
   const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
-  state.loginStatus = error ? "Something went wrong, try again." : "Check your email for the sign in link.";
+  if (error) { state.loginStatus = "Something went wrong, try again."; render(); return; }
+  state.pendingEmail = email;
+  state.loginStep = "code";
+  state.loginStatus = "";
   render();
+}
+async function verifyLoginCode(code) {
+  if (!code || code.trim().length < 4) { state.loginStatus = "Enter the code from your email."; render(); return; }
+  state.loginStatus = "Checking..."; render();
+  const { error } = await sb.auth.verifyOtp({ email: state.pendingEmail, token: code.trim(), type: "email" });
+  if (error) { state.loginStatus = "That code didn't work, check it and try again, or request a new one."; render(); }
+  // On success, onAuthStateChange picks up the session automatically.
 }
 
 async function saveQuizAnswer(moduleId, selectedIndex, correct) {
@@ -392,15 +402,34 @@ function renderLogin() {
   login.innerHTML = `
     <img src="${LOGO}" alt="${BRAND_NAME}" style="display:block; max-width:150px; margin:0 auto 16px;">
     <h1 style="text-align:center;">${BRAND_NAME}</h1>
-    <p style="text-align:center; color:var(--ink-soft); font-size:14px; margin-bottom:20px;">Enter your email to sign in</p>
   `;
   const loginBanner = buildInstallBanner();
   if (loginBanner) login.appendChild(loginBanner);
-  const input = document.createElement("input"); input.type = "email"; input.placeholder = "you@company.com";
-  login.appendChild(input);
-  const btn = document.createElement("button"); btn.className = "primary-btn"; btn.style.marginTop = "0"; btn.textContent = "Send sign in link";
-  btn.onclick = () => { if (input.value) sendMagicLink(input.value); };
-  login.appendChild(btn);
+
+  if (state.loginStep === "code") {
+    const sub = document.createElement("p"); sub.style.cssText = "text-align:center; color:var(--ink-soft); font-size:14px; margin-bottom:20px;";
+    sub.textContent = `Enter the code sent to ${state.pendingEmail}`;
+    login.appendChild(sub);
+    const codeInput = document.createElement("input"); codeInput.type = "text"; codeInput.inputMode = "numeric"; codeInput.maxLength = 10;
+    codeInput.placeholder = "123456"; codeInput.style.cssText += "text-align:center; letter-spacing:4px; font-size:18px;";
+    login.appendChild(codeInput);
+    const verifyBtn = document.createElement("button"); verifyBtn.className = "primary-btn"; verifyBtn.style.marginTop = "0"; verifyBtn.textContent = "Verify code";
+    verifyBtn.onclick = () => verifyLoginCode(codeInput.value);
+    login.appendChild(verifyBtn);
+    const backBtn = document.createElement("button"); backBtn.className = "secondary-btn"; backBtn.textContent = "Use a different email";
+    backBtn.onclick = () => { state.loginStep = "email"; state.loginStatus = ""; render(); };
+    login.appendChild(backBtn);
+  } else {
+    const sub = document.createElement("p"); sub.style.cssText = "text-align:center; color:var(--ink-soft); font-size:14px; margin-bottom:20px;";
+    sub.textContent = "Enter your email to sign in";
+    login.appendChild(sub);
+    const input = document.createElement("input"); input.type = "email"; input.placeholder = "you@company.com";
+    login.appendChild(input);
+    const btn = document.createElement("button"); btn.className = "primary-btn"; btn.style.marginTop = "0"; btn.textContent = "Send sign in code";
+    btn.onclick = () => { if (input.value) sendLoginCode(input.value); };
+    login.appendChild(btn);
+  }
+
   if (state.loginStatus) { const status = document.createElement("p"); status.className = "status-text"; status.textContent = state.loginStatus; login.appendChild(status); }
   wrap.appendChild(login); return wrap;
 }
